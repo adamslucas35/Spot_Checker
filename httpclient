@@ -1,0 +1,151 @@
+Private Sub httpclient()
+
+    ' set up query
+    Dim xmlHttp As New MSXML2.XMLHTTP60
+    Dim url As String
+    Dim qry As String
+    Dim result As String
+    Dim response As String
+    
+    ' set up xml files
+    Dim xmlDoc As MSXML2.DOMDocument60
+    Dim xmlNodeList As MSXML2.IXMLDOMNodeList
+    Dim xmlNode As MSXML2.IXMLDOMNode
+    Dim childNode As MSXML2.IXMLDOMNode
+    
+    'set up excel sheet
+    Dim counter As Integer
+    Dim wb As Workbook
+    Dim ws As Worksheet
+    Dim ws_sum As Worksheet
+    Dim puCd As String
+    Dim PUdt As String
+    Dim rtCD As String
+    Dim lor As String
+    Dim PUtm As String
+    Dim RTtm As String
+    Dim carClass As String
+    Dim Expedia_Btn As Object
+    Dim Amadeus_Btn As Object
+    
+    
+    
+    counter = 2 'row 2
+    Set wb = ActiveWorkbook
+    Set ws = wb.Sheets("data")
+    Set ws_sum = wb.Sheets("Spot Checker")
+    
+    'Vendor Codes
+    Dim vendDict As New Dictionary
+    vendDict.Add "ZE", "Hertz"
+    vendDict.Add "ZI", "Avis"
+    vendDict.Add "ZD", "Budget"
+    vendDict.Add "ZL", "National"
+    vendDict.Add "AL", "Alamo"
+    vendDict.Add "ET", "Enterprise"
+    vendDict.Add "ZR", "Dollar"
+    vendDict.Add "ZT", "Thrifty"
+    
+    puCd = ws_sum.Range("D1").Value
+    PUdt = Format(ws_sum.Range("D2").Value, "yyyymmdd")
+    rtCD = ws_sum.Range("H1").Value
+    lor = ws_sum.Range("D4").Value
+    PUtm = Format(ws_sum.Range("D6").Value, "HH:mm")
+    RTtm = Format(ws_sum.Range("H6").Value, "HH:mm")
+    Set Expedia_Btn = ws_sum.Shapes("Expedia_Btn").OLEFormat.Object
+    Set Amadeus_Btn = ws_sum.Shapes("Amadeus_Btn").OLEFormat.Object
+   
+    
+    source = "AMC"
+    If Expedia_Btn.Value = 1 Then
+        source = "EXI"
+    ElseIf Amadeus_Btn.Value = 1 Then
+        source = "AMC"
+    End If
+    
+    
+    
+    url = "http://webservices.mvrateshop.com/cgi-bin/prod/members/soap/car"
+    
+    
+    qry = "<soapenv:Envelope xmlns:soapenv=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:car=""http://webservices.mvrateshop.com/car/"">"
+    qry = qry & "<soapenv:Header/>"
+    qry = qry & "<soapenv:Body>"
+    qry = qry & "<car:shop_now>"
+    qry = qry & "<car:org_id>YOUR ORG ID HERE</car:org_id>"
+    qry = qry & "<car:client_userid>YOUR CLIENT USER ID HERE</car:client_userid>"
+    qry = qry & "<car:shop_data_source>" & source & "</car:shop_data_source>" 'EXI or AMC
+    qry = qry & "<car:comp_type_cd>V</car:comp_type_cd>"
+    qry = qry & "<car:city_cd>" & puCd & "</car:city_cd>"
+    qry = qry & "<car:rtrn_city_cd>" & rtCD & "</car:rtrn_city_cd>"
+    qry = qry & "<car:arv_dt_spec>" & PUdt & "</car:arv_dt_spec>"
+    qry = qry & "<car:arv_tm>" & PUtm & "</car:arv_tm>"
+    qry = qry & "<car:rtrn_tm>" & RTtm & "</car:rtrn_tm>"
+    qry = qry & "<car:lor>" & lor & "</car:lor>"
+    qry = qry & "<car:vend_cd>ALL</car:vend_cd>"
+    qry = qry & "<car:shop_car_type_cd>" & carClass & "</car:shop_car_type_cd>"
+    qry = qry & "<car:shop_rt_categ>S</car:shop_rt_categ>" 'S,Y for EXI; S for AMC
+    qry = qry & "<car:shop_currency_cd>USD</car:shop_currency_cd>"
+    qry = qry & "</car:shop_now>"
+    qry = qry & "</soapenv:Body>"
+    qry = qry & "</soapenv:Envelope>"
+
+
+    xmlHttp.Open "POST", url, False
+    xmlHttp.setRequestHeader "Content-Type", "text/xml; charset=utf-8"
+    xmlHttp.setRequestHeader "SOAPAction", "http://www.mvrateshop.com/car/shop_now"
+    xmlHttp.Send qry
+    Debug.Print qry
+
+    
+    If xmlHttp.Status = 200 Then
+        response = xmlHttp.responseText
+        
+    
+        Set xmlDoc = New MSXML2.DOMDocument60
+        
+        If xmlDoc.LoadXML(response) Then
+            Worksheets("data").Range("A2:L50000").ClearContents
+            
+            Set xmlNodeList = xmlDoc.SelectNodes("//*[local-name()='CarRateGroup']")
+            
+            For Each xmlNode In xmlNodeList
+                Set childNode = xmlNode.SelectSingleNode("*[local-name()='CarRate']")
+                If Not childNode Is Nothing Then
+                    ws.Cells(counter, 10).Value = GetNodeValue(childNode, "rt_amt") 'Base Rate
+                    ws.Cells(counter, 11).Value = GetNodeValue(childNode, "est_rental_chrg_amt") - (GetNodeValue(childNode, "rt_amt"))   'Taxes & Fees
+                    ws.Cells(counter, 12).Value = GetNodeValue(childNode, "est_rental_chrg_amt") 'Total)
+                End If
+                
+'                ws.Cells(counter, 1).Value = GetNodeValue(xmlNode, "city_cd") 'PU City
+'                ws.Cells(counter, 2).Value = CDate(GetNodeValue(xmlNode, "arv_dt")) 'PU Date
+'                ws.Cells(counter, 3).Value = GetNodeValue(xmlNode, "arv_tm") 'PU Time
+'                ws.Cells(counter, 4).Value = GetNodeValue(xmlNode, "rtrn_city_cd") 'Rtn City
+'                ws.Cells(counter, 5).Value = CDate(GetNodeValue(xmlNode, "arv_dt")) + GetNodeValue(xmlNode, "lor") 'Rtn Date
+'                ws.Cells(counter, 6).Value = GetNodeValue(xmlNode, "rtrn_tm") 'Rtn Time
+'                ws.Cells(counter, 7).Value = GetNodeValue(xmlNode, "lor") 'LOR
+                 ws.Cells(counter, 8).Value = GetNodeValue(xmlNode, "car_type_cd") 'Car Type
+                 ws.Cells(counter, 9).Value = vendDict(GetNodeValue(xmlNode, "vend_cd"))  'Brand
+                
+                counter = counter + 1
+                
+            Next xmlNode
+            
+                
+        End If
+   End If
+    
+
+End Sub
+
+Function GetNodeValue(parentNode As MSXML2.IXMLDOMNode, childNodeName As String) As String
+    Dim childNode As MSXML2.IXMLDOMNode
+    Set childNode = parentNode.SelectSingleNode("*[local-name()=" & Chr(39) & childNodeName & Chr(39) & "]")
+    If Not childNode Is Nothing Then
+        GetNodeValue = childNode.Text
+    Else
+        GetNodeValue = ""
+    End If
+
+End Function
+
